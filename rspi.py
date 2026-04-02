@@ -19,40 +19,6 @@ st.markdown("""<style>
 </style>""", unsafe_allow_html=True)
 
 # =========================================================
-# LOGIN
-# =========================================================
-def login_page():
-    st.markdown("""
-        <div style="max-width:400px;margin:80px auto;padding:40px;
-            background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
-            <h2 style="text-align:center;margin-bottom:8px;">📊 RSPI Dashboard</h2>
-            <p style="text-align:center;color:#888;margin-bottom:24px;">Silakan login untuk melanjutkan</p>
-        </div>
-    """, unsafe_allow_html=True)
-
-    with st.form("login_form"):
-        st.markdown("### 🔐 Login")
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login", use_container_width=True)
-
-    if submitted:
-        if (username == st.secrets["auth"]["username"] and 
-            password == st.secrets["auth"]["password"]):
-            st.session_state["logged_in"] = True
-            st.session_state["username"] = username
-            st.rerun()
-        else:
-            st.error("❌ Username atau password salah")
-
-if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
-
-if not st.session_state["logged_in"]:
-    login_page()
-    st.stop()
-
-# =========================================================
 # DB CONNECTION
 # =========================================================
 DB_HOST = st.secrets["db"]["host"]
@@ -131,29 +97,18 @@ if 'timestamp' in df_db.columns:
 df_db['_hashtags']      = df_db['caption'].apply(extract_hashtags)
 df_db['_shortcode']     = df_db['permalink'].apply(extract_shortcode)
 df_db['_campaign_list'] = df_db['campaign'].apply(
-    lambda x: [c.strip() for c in str(x).replace(',', ' ').split() if c.strip().startswith('#')] if pd.notna(x) else []
+    lambda x: [c.strip() for c in str(x).split(',') if c.strip().startswith('#')] if pd.notna(x) else []
 )
+
+
 
 # =========================================================
 # SIDEBAR FILTER
 # =========================================================
-st.title("📊 RSPI Instagram Dashboard")
+st.title("📊 RSPI Instagram Reels Dashboard")
 
 with st.sidebar:
-    st.markdown(f"👤 **{st.session_state['username']}**")
-    if st.button("🚪 Logout", use_container_width=True):
-        st.session_state["logged_in"] = False
-        st.session_state["username"] = ""
-        st.rerun()
-
     st.header("🔽 Filter")
-
-    all_campaigns = sorted(set(
-        tag for tags in df_db['_campaign_list'] for tag in tags
-    ))
-    selected_campaign = st.selectbox("Campaign", ["Semua"] + all_campaigns)
-    selected_shortcode = st.text_input("Shortcode", placeholder="Masukkan shortcode...")
-
     st.markdown("#### 📅 Filter Tanggal")
     if 'timestamp' in df_db.columns:
         min_date = df_db['timestamp'].min().date()
@@ -173,6 +128,22 @@ with st.sidebar:
     else:
         cur_range = None
         pre_range = None
+
+    # Filter campaign berdasarkan tanggal yang dipilih
+    if cur_range and len(cur_range) == 2 and 'timestamp' in df_db.columns:
+        df_date_filtered = df_db[
+            (df_db['timestamp'].dt.date >= cur_range[0]) &
+            (df_db['timestamp'].dt.date <= cur_range[1])
+        ]
+    else:
+        df_date_filtered = df_db.copy()
+
+    all_campaigns = sorted(set(
+        tag for tags in df_date_filtered['_campaign_list'] for tag in tags
+    ))
+    selected_campaign = st.selectbox("Campaign", ["Semua"] + all_campaigns)
+    selected_shortcode = st.text_input("Shortcode", placeholder="Masukkan shortcode...")
+
 
 # sisa kode (APPLY FILTER, METRICS, TOP 3, TABEL) tetap sama seperti sebelumnya ...
 # =========================================================
@@ -234,7 +205,6 @@ def fmt_delta_hhmmss(key):
 # =========================================================
 # OVERVIEW METRICS
 # =========================================================
-st.subheader("📊 Overview Metrics")
 
 col1, col2 = st.columns(2)
 col1.metric("👀 Total Views", f"{cur['total_views']:,}", fmt_delta("total_views"))
